@@ -52,6 +52,47 @@ class PlayerController
         $this->bot->sendPhoto($chatId, $photoUrl, $introText, $keyboard);
     }
 
+    public function previewClass(int|string $chatId, int $classId, int $messageId): void
+    {
+        $class = $this->charRepo->getClassById($classId);
+        if (!$class) {
+            $this->bot->editMessageText($chatId, $messageId, "Classe inválida.");
+            return;
+        }
+
+        $className = strtolower($class['name']);
+        if ($className === 'guerreiro') {
+            $classPhoto = "https://aurora-rpg-sepia.vercel.app/images/guerreiro.png";
+            $desc = "Guerreiros são a linha de frente de Aurora. Mestres no combate corpo-a-corpo, eles possuem alta Vitalidade para suportar golpes mortais e Força bruta capaz de esmagar armaduras.";
+        } elseif ($className === 'mago') {
+            $classPhoto = "https://aurora-rpg-sepia.vercel.app/images/mago.png";
+            $desc = "Magos estudam os mistérios arcanos. Eles possuem pouca vida, mas canalizam Inteligência maciça para conjurar magias destrutivas que ignoram parte da defesa inimiga.";
+        } else {
+            $classPhoto = "https://aurora-rpg-sepia.vercel.app/images/arqueiro.png";
+            $desc = "Arqueiros são ágeis e letais. Movendo-se pelas sombras, eles usam Agilidade para desviar de ataques e atingir pontos vitais com precisão.";
+        }
+
+        $text = "🛡️ <b>{$class['name']}</b>\n\n";
+        $text .= "<i>{$desc}</i>\n\n";
+        $text .= "<b>Atributos Iniciais:</b>\n";
+        $text .= "❤️ HP: {$class['base_hp']} | 🧪 Mana: {$class['base_mana']}\n";
+        $text .= "💪 Força: {$class['base_str']} | 🏃 Agilidade: {$class['base_agi']}\n";
+        $text .= "🧠 Inteligência: {$class['base_int']} | 🛡️ Vitalidade: {$class['base_vit']}\n\n";
+        $text .= "Você deseja iniciar sua jornada como um {$class['name']}?";
+
+        $keyboard = ['inline_keyboard' => [
+            [['text' => '✅ Confirmar Classe', 'callback_data' => "confirm_class:{$class['id']}"]],
+            [['text' => '🔙 Escolher Outra', 'callback_data' => "cancel_class"]]
+        ]];
+
+        // Como o Telegram não permite editar uma foto para outra através do editMessageText (isso dá erro se a msg original era foto e tentamos usar editMessageText simples), vamos excluir a anterior e mandar nova.
+        // Como não temos deleteMessage mapeado no bot, vamos usar um truque ou adicionar deleteMessage.
+        // Para manter simples, vamos enviar uma nova foto e tentar deletar a antiga.
+        // Vou adicionar o deleteMessage no bot rapidamente depois.
+        $this->bot->deleteMessage($chatId, $messageId);
+        $this->bot->sendPhoto($chatId, $classPhoto, $text, $keyboard);
+    }
+
     public function processRegistration(int|string $chatId, int $userId, int $classId, int $messageId): void
     {
         $character = $this->charRepo->findByUserId($userId);
@@ -105,8 +146,8 @@ class PlayerController
 
         $this->bot->sendPhoto($chatId, $classPhoto, $successText);
         
-        // Remove a mensagem anterior (a foto da vila com botões) para não poluir
-        $this->bot->editMessageText($chatId, $messageId, "<i>Jornada iniciada...</i>");
+        // Remove a mensagem anterior (o preview da classe com botões) para não poluir
+        $this->bot->deleteMessage($chatId, $messageId);
     }
 
     private function giveStartingEquipment(int $charId, string $className): void

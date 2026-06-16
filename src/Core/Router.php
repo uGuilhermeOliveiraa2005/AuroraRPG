@@ -115,8 +115,19 @@ class Router
             switch ($action) {
                 case 'class_select':
                     $classId = (int)($parts[1] ?? 0);
+                    $playerController->previewClass($chatId, $classId, $messageId);
+                    $this->bot->answerCallbackQuery($callbackId);
+                    break;
+                case 'confirm_class':
+                    $classId = (int)($parts[1] ?? 0);
                     $playerController->processRegistration($chatId, $userId, $classId, $messageId);
-                    $this->bot->answerCallbackQuery($callbackId, "Classe selecionada!");
+                    $this->bot->answerCallbackQuery($callbackId, "Classe confirmada!");
+                    break;
+                case 'cancel_class':
+                    $user = $this->userRepo->findById($userId);
+                    $this->bot->deleteMessage($chatId, $messageId);
+                    $playerController->register($chatId, $userId, $user['username'] ?? '', $user['first_name'] ?? '');
+                    $this->bot->answerCallbackQuery($callbackId);
                     break;
                 case 'combat_attack':
                     $combatController->attack($chatId, $userId, $messageId, $callbackId);

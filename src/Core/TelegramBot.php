@@ -71,6 +71,16 @@ class TelegramBot
         return $this->request('editMessageText', $data);
     }
 
+    public function deleteMessage(int|string $chatId, int $messageId): array|bool
+    {
+        $data = [
+            'chat_id' => $chatId,
+            'message_id' => $messageId,
+        ];
+        
+        return $this->request('deleteMessage', $data);
+    }
+
     public function getUpdates(int $offset = 0, int $limit = 100, int $timeout = 30): array|bool
     {
         $data = [
