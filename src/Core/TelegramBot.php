@@ -79,7 +79,6 @@ class TelegramBot
 
         $response = curl_exec($ch);
         $error = curl_error($ch);
-        curl_close($ch);
 
         if ($error) {
             error_log("Telegram API Error: $error");

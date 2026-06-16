@@ -33,7 +33,6 @@ $response = curl_exec($ch);
 if ($response === false) {
     $response = "Erro cURL: " . curl_error($ch);
 }
-curl_close($ch);
 
 echo "Resposta do Telegram:\n";
 echo $response . "\n";
