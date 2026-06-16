@@ -14,18 +14,9 @@ class CombatRepository
         $this->db = Database::getInstance();
     }
 
-    public function getRandomMonsterByArea(int $level): ?array
+    public function getRandomMonsterByArea(int $areaId): ?array
     {
-        // Encontra área compatível
-        $stmt = $this->db->prepare("SELECT id FROM areas WHERE min_level <= :level AND max_level >= :level ORDER BY id DESC LIMIT 1");
-        $stmt->execute(['level' => $level]);
-        $areaId = $stmt->fetchColumn();
-
-        if (!$areaId) {
-            $areaId = 1; // Fallback
-        }
-
-        // Pega monstro aleatório
+        // Pega monstro aleatório da área
         $stmt = $this->db->prepare("SELECT * FROM monsters WHERE area_id = :area_id ORDER BY RANDOM() LIMIT 1");
         $stmt->execute(['area_id' => $areaId]);
         $monster = $stmt->fetch();

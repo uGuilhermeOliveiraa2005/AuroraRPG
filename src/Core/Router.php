@@ -44,6 +44,7 @@ class Router
         $inventoryController = new InventoryController($this->bot);
         $marketController = new MarketController($this->bot);
         $guildController = new GuildController($this->bot);
+        $areaController = new \Aurora\Controllers\AreaController($this->bot);
 
         switch ($command) {
             case '/start':
@@ -62,8 +63,16 @@ class Router
             case '/atributos':
                 $playerController->profile($chatId, $userId);
                 break;
+            case '/mapa':
+            case '/viajar':
+                $areaController->showMap($chatId, $userId);
+                break;
             case '/explorar':
                 $combatController->explore($chatId, $userId);
+                break;
+            case '/cidade':
+                $cityController = new \Aurora\Controllers\CityController($this->bot);
+                $cityController->showCity($chatId, $userId);
                 break;
             case '/descansar':
             case '/curar':
@@ -134,6 +143,30 @@ class Router
                 case 'stat_add':
                     $stat = $parts[1] ?? '';
                     $playerController->addStat($chatId, $userId, $messageId, $callbackId, $stat);
+                    break;
+                case 'map_travel':
+                    $areaId = (int)($parts[1] ?? 0);
+                    $areaController = new \Aurora\Controllers\AreaController($this->bot);
+                    $areaController->travel($chatId, $userId, $messageId, $callbackId, $areaId);
+                    break;
+                case 'city_menu':
+                    $cityController = new \Aurora\Controllers\CityController($this->bot);
+                    $cityController->showCity($chatId, $userId, $messageId);
+                    break;
+                case 'npc':
+                    $npcId = $parts[1] ?? '';
+                    $cityController = new \Aurora\Controllers\CityController($this->bot);
+                    $cityController->interactNpc($chatId, $userId, $messageId, $callbackId, $npcId);
+                    break;
+                case 'quest_accept':
+                    $questId = (int)($parts[1] ?? 0);
+                    $questController = new \Aurora\Controllers\QuestController($this->bot);
+                    $questController->acceptQuest($chatId, $userId, $messageId, $callbackId, $questId);
+                    break;
+                case 'quest_complete':
+                    $questId = (int)($parts[1] ?? 0);
+                    $questController = new \Aurora\Controllers\QuestController($this->bot);
+                    $questController->turnInQuest($chatId, $userId, $messageId, $callbackId, $questId);
                     break;
                 default:
                     $this->bot->answerCallbackQuery($callbackId, "Ação desconhecida.", true);

@@ -53,8 +53,9 @@ class CombatController
             return;
         }
 
-        // Busca monstro compatível
-        $monster = $this->combatRepo->getRandomMonsterByArea($character['level']);
+        // Busca monstro compatível na área do jogador
+        $areaId = $character['current_area_id'] ?? 1;
+        $monster = $this->combatRepo->getRandomMonsterByArea($areaId);
         if (!$monster) {
             $this->bot->sendMessage($chatId, "Nenhum monstro encontrado nesta área.");
             return;
@@ -223,6 +224,10 @@ class CombatController
     {
         $this->combatRepo->deleteCombatInstance($combat['id']);
         $this->userRepo->updateState($character['user_id'], 'idle');
+
+        // Incrementar Quest se ativa
+        $questRepo = new \Aurora\Repositories\QuestRepository();
+        $questRepo->incrementKillCount($character['id'], $combat['monster_id']);
 
         $xp = $combat['base_xp'];
         $gold = $combat['base_gold'];
