@@ -124,7 +124,8 @@ class Router
                     $this->bot->answerCallbackQuery($callbackId, "Classe confirmada!");
                     break;
                 case 'cancel_class':
-                    $user = $this->userRepo->findById($userId);
+                    $userRepo = new \Aurora\Repositories\UserRepository();
+                    $user = $userRepo->findById($userId);
                     $this->bot->deleteMessage($chatId, $messageId);
                     $playerController->register($chatId, $userId, $user['username'] ?? '', $user['first_name'] ?? '');
                     $this->bot->answerCallbackQuery($callbackId);
