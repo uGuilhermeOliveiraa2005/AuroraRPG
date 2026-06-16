@@ -65,6 +65,10 @@ class Router
             case '/explorar':
                 $combatController->explore($chatId, $userId);
                 break;
+            case '/descansar':
+            case '/curar':
+                $playerController->rest($chatId, $userId);
+                break;
             case '/mercado':
                 $marketController->showMarket($chatId, $userId);
                 break;

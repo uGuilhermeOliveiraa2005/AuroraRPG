@@ -26,7 +26,7 @@ class InventoryController
     {
         $user = $this->userRepo->findById($userId);
         if (!$user || $user['state'] === 'combat') {
-            $msg = "Você não pode acessar o inventário agora.";
+            $msg = "⚔️ Você não pode acessar o inventário enquanto está em combate!";
             if ($messageId) $this->bot->editMessageText($chatId, $messageId, $msg);
             else $this->bot->sendMessage($chatId, $msg);
             return;
@@ -43,7 +43,7 @@ class InventoryController
         $items = $this->invRepo->getInventory($character['id']);
 
         if (empty($items)) {
-            $msg = "🎒 <b>Seu Inventário está vazio!</b>";
+            $msg = "🎒 <b>Sua mochila está vazia!</b>\nVá explorar o mundo para encontrar itens.";
             if ($messageId) $this->bot->editMessageText($chatId, $messageId, $msg);
             else $this->bot->sendMessage($chatId, $msg);
             return;
@@ -52,9 +52,20 @@ class InventoryController
         $text = "🎒 <b>Inventário de {$character['name']}</b>\n\n";
         $keyboard = ['inline_keyboard' => []];
 
+        $typeEmojis = [
+            'weapon' => '🗡️',
+            'helmet' => '🪖',
+            'armor'  => '🛡️',
+            'boots'  => '👢',
+            'amulet' => '📿',
+            'potion' => '🧪',
+            'material' => '📦'
+        ];
+
         foreach ($items as $item) {
-            $equipStr = $item['is_equipped'] ? " <i>[Equipado]</i>" : "";
-            $text .= "• <b>{$item['quantity']}x {$item['name']}</b> ({$item['type']}){$equipStr}\n";
+            $icon = $typeEmojis[$item['type']] ?? '🎒';
+            $equipStr = $item['is_equipped'] ? " <b>[Equipado]</b>" : "";
+            $text .= "{$icon} <b>{$item['quantity']}x {$item['name']}</b>{$equipStr}\n";
 
             if ($item['type'] === 'potion') {
                 $keyboard['inline_keyboard'][] = [
@@ -63,11 +74,11 @@ class InventoryController
             } elseif (in_array($item['type'], ['weapon', 'helmet', 'armor', 'boots', 'amulet'])) {
                 if ($item['is_equipped']) {
                     $keyboard['inline_keyboard'][] = [
-                        ['text' => "❌ Desequipar {$item['name']}", 'callback_data' => "inv_unequip:{$item['id']}"]
+                        ['text' => "❌ Remover {$item['name']}", 'callback_data' => "inv_unequip:{$item['id']}"]
                     ];
                 } else {
                     $keyboard['inline_keyboard'][] = [
-                        ['text' => "🛡️ Equipar {$item['name']}", 'callback_data' => "inv_equip:{$item['id']}"]
+                        ['text' => "👕 Equipar {$item['name']}", 'callback_data' => "inv_equip:{$item['id']}"]
                     ];
                 }
             }

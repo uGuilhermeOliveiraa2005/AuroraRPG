@@ -68,6 +68,17 @@ class PlayerController
         }
     }
 
+    private function generateProgressBar(int $current, int $max, int $length = 10): string
+    {
+        $max = max(1, $max); // Prevenir divisão por zero
+        $percent = $current / $max;
+        $filledBlocks = (int)round($percent * $length);
+        $emptyBlocks = $length - $filledBlocks;
+        
+        $bar = str_repeat('█', max(0, $filledBlocks)) . str_repeat('░', max(0, $emptyBlocks));
+        return "<code>[{$bar}]</code> " . floor($percent * 100) . "%";
+    }
+
     public function profile(int|string $chatId, int $userId, ?int $messageId = null): void
     {
         $character = $this->charRepo->findByUserId($userId);
@@ -76,23 +87,30 @@ class PlayerController
             return;
         }
 
-        $text = "👤 <b>Perfil de {$character['name']}</b>\n";
-        $text .= "Classe: {$character['class_name']} | Nível: {$character['level']}\n";
-        $text .= "XP: {$character['xp']} | Ouro: 🪙 {$character['gold']}\n\n";
+        // Calcula XP necessário
+        $xpRequired = (int)(pow($character['level'], 1.5) * 100);
+
+        $text = "👤 <b>Ficha de Personagem: {$character['name']}</b>\n";
+        $text .= "📜 Classe: <b>{$character['class_name']}</b> | ⭐ Nível: <b>{$character['level']}</b>\n";
+        $text .= "🪙 Ouro: <b>{$character['gold']}</b>\n\n";
         
         $text .= "❤️ HP: {$character['hp']}/{$character['max_hp']}\n";
-        $text .= "🧪 Mana: {$character['mana']}/{$character['max_mana']}\n\n";
+        $text .= $this->generateProgressBar($character['hp'], $character['max_hp']) . "\n";
+        $text .= "🧪 MP: {$character['mana']}/{$character['max_mana']}\n";
+        $text .= $this->generateProgressBar($character['mana'], $character['max_mana']) . "\n";
+        $text .= "✨ XP: {$character['xp']}/{$xpRequired}\n";
+        $text .= $this->generateProgressBar($character['xp'], $xpRequired) . "\n\n";
         
-        $text .= "<b>Atributos:</b>\n";
-        $text .= "💪 Força: {$character['str']}\n";
-        $text .= "🏃 Agilidade: {$character['agi']}\n";
-        $text .= "🧠 Inteligência: {$character['int']}\n";
-        $text .= "🛡️ Vitalidade: {$character['vit']}\n\n";
+        $text .= "<b>⚔️ Atributos Básicos:</b>\n";
+        $text .= "💪 Força: <b>{$character['str']}</b>\n";
+        $text .= "🏃 Agilidade: <b>{$character['agi']}</b>\n";
+        $text .= "🧠 Inteligência: <b>{$character['int']}</b>\n";
+        $text .= "🛡️ Vitalidade: <b>{$character['vit']}</b>\n\n";
 
         $keyboard = null;
 
         if ($character['stat_points'] > 0) {
-            $text .= "<i>Você tem {$character['stat_points']} pontos disponíveis! Use os botões abaixo para distribuir.</i>";
+            $text .= "<i>🌟 Você tem <b>{$character['stat_points']}</b> pontos de atributo disponíveis!</i>";
             
             $keyboard = ['inline_keyboard' => [
                 [
@@ -100,7 +118,7 @@ class PlayerController
                     ['text' => '🏃 +1 Agilidade', 'callback_data' => 'stat_add:agi']
                 ],
                 [
-                    ['text' => '🧠 +1 Int', 'callback_data' => 'stat_add:int'],
+                    ['text' => '🧠 +1 Inteligência', 'callback_data' => 'stat_add:int'],
                     ['text' => '🛡️ +1 Vitalidade', 'callback_data' => 'stat_add:vit']
                 ]
             ]];
@@ -132,11 +150,43 @@ class PlayerController
         $success = $this->charRepo->addStatPoint($character['id'], $stat);
 
         if ($success) {
-            $this->bot->answerCallbackQuery($callbackId, "Ponto distribuído!");
-            // Recarrega o perfil com messageId para editar a mesma mensagem
+            $this->bot->answerCallbackQuery($callbackId, "Ponto distribuído com sucesso!");
             $this->profile($chatId, $userId, $messageId);
         } else {
             $this->bot->answerCallbackQuery($callbackId, "Erro ao distribuir ponto.", true);
         }
+    }
+
+    public function rest(int|string $chatId, int $userId): void
+    {
+        $character = $this->charRepo->findByUserId($userId);
+        if (!$character) {
+            $this->bot->sendMessage($chatId, "Você precisa criar um personagem antes de descansar.");
+            return;
+        }
+
+        $user = $this->userRepo->findById($userId);
+        if ($user['state'] === 'combat') {
+            $this->bot->sendMessage($chatId, "⚔️ Você não pode descansar na taverna enquanto está no meio de uma batalha!");
+            return;
+        }
+
+        if ($character['hp'] >= $character['max_hp'] && $character['mana'] >= $character['max_mana']) {
+            $this->bot->sendMessage($chatId, "✨ Sua energia já está completa. Vá explorar!");
+            return;
+        }
+
+        $cost = $character['level'] * 5; // Custo escala com o nível
+
+        if ($character['gold'] < $cost) {
+            $this->bot->sendMessage($chatId, "🏨 Você precisa de 🪙 <b>{$cost}</b> de Ouro para pagar a estadia na taverna.");
+            return;
+        }
+
+        $db = \Aurora\Core\Database::getInstance();
+        $stmt = $db->prepare("UPDATE characters SET hp = max_hp, mana = max_mana, gold = gold - :cost WHERE id = :id");
+        $stmt->execute(['cost' => $cost, 'id' => $character['id']]);
+
+        $this->bot->sendMessage($chatId, "🛌 <b>Você descansou na taverna!</b>\n\nPor 🪙 {$cost} Ouro, você dormiu profundamente e recuperou todo o seu HP e Mana.");
     }
 }

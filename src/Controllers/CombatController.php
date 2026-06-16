@@ -101,9 +101,18 @@ class CombatController
 
         // === Turno do Jogador ===
         $playerAttack = $this->combatSvc->calculatePlayerDamage($character, $combat);
-        $monsterHp = max(0, $combat['monster_current_hp'] - $playerAttack['damage']);
         
-        $log = "⚔️ Você ataca o <b>{$combat['name']}</b> e causa <b>{$playerAttack['damage']}</b> de dano!" . ($playerAttack['is_crit'] ? " (Acerto Crítico! 💥)" : "") . "\n";
+        $log = "";
+        $monsterHp = $combat['monster_current_hp'];
+
+        if ($playerAttack['is_miss']) {
+            $log .= "💨 Você atacou o <b>{$combat['name']}</b>, mas ele esquivou agilmente!\n";
+        } else {
+            $monsterHp = max(0, $combat['monster_current_hp'] - $playerAttack['damage']);
+            $dmgTypeIcon = ($playerAttack['type'] === 'magical') ? '🔮' : '⚔️';
+            $critText = $playerAttack['is_crit'] ? " (<b>Acerto Crítico! 💥</b>)" : "";
+            $log .= "{$dmgTypeIcon} Você golpeou o <b>{$combat['name']}</b> causando <b>{$playerAttack['damage']}</b> de dano!{$critText}\n";
+        }
 
         // Verifica se Monstro Morreu
         if ($monsterHp <= 0) {
@@ -117,9 +126,9 @@ class CombatController
         $playerHp = max(0, $character['hp'] - $monsterAttack['damage']);
 
         if ($monsterAttack['is_dodge']) {
-            $log .= "💨 Você <b>esquivou</b> do ataque do monstro!\n";
+            $log .= "💨 O monstro avança ferozmente, mas você desvia com maestria!\n";
         } else {
-            $log .= "🩸 O monstro te ataca e causa <b>{$monsterAttack['damage']}</b> de dano!\n";
+            $log .= "🩸 O <b>{$combat['name']}</b> te atinge brutalmente, causando <b>{$monsterAttack['damage']}</b> de dano!\n";
         }
 
         // Verifica se Jogador Morreu
@@ -161,20 +170,53 @@ class CombatController
         $character = $this->charRepo->findByUserId($userId);
         $combat = $this->combatRepo->getCombatInstance($character['id']);
 
-        if ($combat) {
+        if (!$combat) {
+            $this->userRepo->updateState($userId, 'idle');
+            $this->bot->editMessageText($chatId, $messageId, "O monstro desapareceu.");
+            return;
+        }
+
+        $monsterAgi = $combat['level'] * 2;
+        $fleeChance = 50 + (($character['total_agi'] - $monsterAgi) * 2);
+        $fleeChance = max(20, min($fleeChance, 95));
+
+        if (rand(1, 100) <= $fleeChance) {
+            // Sucesso na Fuga
             $this->combatRepo->deleteCombatInstance($combat['id']);
-        }
+            $this->userRepo->updateState($userId, 'idle');
+            $this->bot->answerCallbackQuery($callbackId);
+            $this->bot->editMessageText($chatId, $messageId, "🏃💨 Você jogou poeira nos olhos do monstro e conseguiu fugir para a cidade!");
+        } else {
+            // Falha na Fuga: Toma ataque do monstro
+            $monsterAttack = $this->combatSvc->calculateMonsterDamage($character, $combat);
+            $playerHp = max(0, $character['hp'] - $monsterAttack['damage']);
+            
+            $log = "🏃 Você tentou fugir, mas tropeçou!\n";
+            $log .= "🩸 O <b>{$combat['name']}</b> aproveitou e te atacou pelas costas, causando <b>{$monsterAttack['damage']}</b> de dano!\n";
 
-        $this->userRepo->updateState($userId, 'idle');
-        
-        // Cura 50% para facilitar nos testes
-        $newHp = (int)($character['max_hp'] * 0.5);
-        if ($character['hp'] < $newHp) {
-            $this->combatRepo->updateCharacterHpAndRewards($character['id'], $newHp);
-        }
+            if ($playerHp <= 0) {
+                $this->bot->answerCallbackQuery($callbackId);
+                $this->endCombatDefeat($chatId, $messageId, $character, $combat, $log);
+                return;
+            }
 
-        $this->bot->answerCallbackQuery($callbackId);
-        $this->bot->editMessageText($chatId, $messageId, "🏃 Você fugiu da batalha com sucesso! Seu HP foi restaurado para 50%.");
+            $this->combatRepo->updateCharacterHpAndRewards($character['id'], $playerHp);
+            
+            $text = "👾 <b>{$combat['name']}</b> (Lvl {$combat['level']})\n";
+            $text .= "❤️ HP do Monstro: {$combat['monster_current_hp']}/{$combat['max_hp']}\n";
+            $text .= "❤️ Seu HP: {$playerHp}/{$character['max_hp']}\n\n";
+            $text .= $log;
+
+            $keyboard = ['inline_keyboard' => [
+                [
+                    ['text' => '⚔️ Atacar', 'callback_data' => "combat_attack"],
+                    ['text' => '🏃 Fugir', 'callback_data' => "combat_flee"]
+                ]
+            ]];
+
+            $this->bot->answerCallbackQuery($callbackId, "Falha ao fugir!", true);
+            $this->bot->editMessageText($chatId, $messageId, $text, $keyboard);
+        }
     }
 
     private function endCombatVictory(int|string $chatId, int $messageId, array $character, array $combat, string $log): void
