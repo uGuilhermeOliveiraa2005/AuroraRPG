@@ -27,6 +27,22 @@ class TelegramBot
 
         return $this->request('sendMessage', $data);
     }
+
+    public function sendPhoto(int|string $chatId, string $photo, string $caption = '', array $replyMarkup = null): array|bool
+    {
+        $data = [
+            'chat_id' => $chatId,
+            'photo' => $photo,
+            'caption' => $caption,
+            'parse_mode' => 'HTML',
+        ];
+
+        if ($replyMarkup) {
+            $data['reply_markup'] = json_encode($replyMarkup);
+        }
+
+        return $this->request('sendPhoto', $data);
+    }
     
     public function answerCallbackQuery(string $callbackQueryId, string $text = '', bool $showAlert = false): array|bool
     {

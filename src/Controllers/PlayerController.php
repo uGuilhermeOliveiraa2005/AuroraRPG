@@ -21,17 +21,24 @@ class PlayerController
 
     public function register(int|string $chatId, int $userId, string $username, string $firstName): void
     {
-        // 1. Criar/Atualizar Usuário
-        $this->userRepo->create($userId, $username, $firstName);
+        $user = $this->userRepo->findById($userId);
+        
+        if (!$user) {
+            $this->userRepo->create($userId, $username, $firstName);
+        }
 
-        // 2. Checar se já tem personagem
         $character = $this->charRepo->findByUserId($userId);
         if ($character) {
             $this->bot->sendMessage($chatId, "Você já possui um personagem: <b>{$character['name']}</b> (Lvl {$character['level']}).\nUse /perfil para ver seus status.");
             return;
         }
 
-        // 3. Oferecer Classes
+        // Enviar Prólogo
+        $introText = "📜 <b>Bem-vindo a Aurora!</b>\n\n";
+        $introText .= "<i>Você acorda em uma carroça sacolejante. O cheiro de pinheiros e fumaça enche o ar. O Rei Demônio despertou após mil anos de sono, e as hordas das trevas marcharam sobre a capital.</i>\n\n";
+        $introText .= "<i>Você, um sobrevivente, chegou à <b>Vila de Alvorada</b>. É aqui que sua jornada para se tornar um herói lendário começa.</i>\n\n";
+        $introText .= "<b>Escolha sua vocação para iniciar sua jornada:</b>";
+
         $classes = $this->charRepo->getClasses();
         $keyboard = ['inline_keyboard' => []];
 
@@ -41,8 +48,8 @@ class PlayerController
             ];
         }
 
-        $text = "<b>Criação de Personagem</b>\n\nEscolha sua classe inicial para começar sua jornada em Aurora:";
-        $this->bot->sendMessage($chatId, $text, $keyboard);
+        $photoUrl = "https://aurora-rpg-sepia.vercel.app/images/vila.png";
+        $this->bot->sendPhoto($chatId, $photoUrl, $introText, $keyboard);
     }
 
     public function processRegistration(int|string $chatId, int $userId, int $classId, int $messageId): void
@@ -55,16 +62,88 @@ class PlayerController
 
         $user = $this->userRepo->findById($userId);
         if (!$user) {
-            $this->bot->editMessageText($chatId, $messageId, "Erro: Use /registrar primeiro.");
+            $this->bot->sendMessage($chatId, "Erro: Use /registrar primeiro.");
             return;
         }
 
-        $success = $this->charRepo->create($userId, $user['first_name'], $classId);
+        $class = $this->charRepo->getClassById($classId);
+        if (!$class) {
+            $this->bot->sendMessage($chatId, "Classe inválida.");
+            return;
+        }
 
-        if ($success) {
-            $this->bot->editMessageText($chatId, $messageId, "🎉 <b>Personagem criado com sucesso!</b>\n\nUse /perfil para ver seus status e /explorar para começar sua jornada!");
+        // Criar o personagem
+        $charId = $this->charRepo->createCharacter($userId, $user['first_name'], $classId);
+
+        if (!$charId) {
+            $this->bot->sendMessage($chatId, "Ocorreu um erro ao criar seu personagem.");
+            return;
+        }
+
+        // Dar equipamentos iniciais dependendo da classe
+        $this->giveStartingEquipment($charId, $class['name']);
+
+        // Setar area inicial
+        $db = \Aurora\Core\Database::getInstance();
+        $db->prepare("UPDATE characters SET current_area_id = 1 WHERE id = ?")->execute([$charId]);
+
+        // Determinar imagem da classe
+        $className = strtolower($class['name']);
+        if ($className === 'guerreiro') {
+            $classPhoto = "https://aurora-rpg-sepia.vercel.app/images/guerreiro.png";
+        } elseif ($className === 'mago') {
+            $classPhoto = "https://aurora-rpg-sepia.vercel.app/images/mago.png";
         } else {
-            $this->bot->editMessageText($chatId, $messageId, "⚠️ Erro ao criar personagem. Tente novamente.");
+            $classPhoto = "https://aurora-rpg-sepia.vercel.app/images/arqueiro.png";
+        }
+
+        $successText = "🎉 <b>Personagem Criado com Sucesso!</b>\n\n";
+        $successText .= "Você agora é um <b>{$class['name']}</b> e recebeu seus equipamentos básicos.\n\n";
+        $successText .= "🔹 Digite /perfil para ver seus status.\n";
+        $successText .= "🔹 Digite /inventario para gerenciar seus itens.\n";
+        $successText .= "🔹 Digite /cidade para falar com o Ancião e pegar sua primeira missão!";
+
+        $this->bot->sendPhoto($chatId, $classPhoto, $successText);
+        
+        // Remove a mensagem anterior (a foto da vila com botões) para não poluir
+        $this->bot->editMessageText($chatId, $messageId, "<i>Jornada iniciada...</i>");
+    }
+
+    private function giveStartingEquipment(int $charId, string $className): void
+    {
+        $db = \Aurora\Core\Database::getInstance();
+        $invRepo = new \Aurora\Repositories\InventoryRepository();
+        
+        // Encontrar os IDs dos itens no banco
+        $stmt = $db->query("SELECT name, id FROM items WHERE name IN ('Espada Enferrujada', 'Armadura de Couro', 'Arco Curto de Madeira', 'Túnica Leve', 'Cajado de Aprendiz', 'Veste de Pano')");
+        $items = $stmt->fetchAll(\PDO::FETCH_KEY_PAIR); // Retorna ['Nome' => ID]
+
+        $weaponId = null;
+        $armorId = null;
+
+        $className = strtolower($className);
+        if ($className === 'guerreiro') {
+            $weaponId = $items['Espada Enferrujada'] ?? null;
+            $armorId = $items['Armadura de Couro'] ?? null;
+        } elseif ($className === 'arqueiro') {
+            $weaponId = $items['Arco Curto de Madeira'] ?? null;
+            $armorId = $items['Túnica Leve'] ?? null;
+        } else {
+            $weaponId = $items['Cajado de Aprendiz'] ?? null;
+            $armorId = $items['Veste de Pano'] ?? null;
+        }
+
+        if ($weaponId) {
+            $invRepo->addItem($charId, $weaponId, 1);
+            // Pega o ID do inventário que acabou de ser inserido
+            $invId = $db->lastInsertId();
+            $invRepo->toggleEquip($invId, $charId, 'weapon', true);
+        }
+
+        if ($armorId) {
+            $invRepo->addItem($charId, $armorId, 1);
+            $invId = $db->lastInsertId();
+            $invRepo->toggleEquip($invId, $charId, 'armor', true);
         }
     }
 
