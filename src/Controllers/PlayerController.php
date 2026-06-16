@@ -48,7 +48,7 @@ class PlayerController
             ];
         }
 
-        $photoUrl = "https://aurora-rpg-sepia.vercel.app/images/vila.png";
+        $photoUrl = "https://aurora-rpg-sepia.vercel.app/images/logo.png";
         $this->bot->sendPhoto($chatId, $photoUrl, $introText, $keyboard);
     }
 
