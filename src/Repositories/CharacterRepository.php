@@ -70,10 +70,10 @@ class CharacterRepository
         return $stmt->rowCount() > 0;
     }
 
-    public function create(int $userId, string $name, int $classId): bool
+    public function createCharacter(int $userId, string $name, int $classId): ?int
     {
         $class = $this->getClassById($classId);
-        if (!$class) return false;
+        if (!$class) return null;
 
         $stmt = $this->db->prepare("
             INSERT INTO characters 
@@ -82,7 +82,7 @@ class CharacterRepository
             (:user_id, :name, :class_id, :hp, :max_hp, :mana, :max_mana, :str, :agi, :int, :vit)
         ");
 
-        return $stmt->execute([
+        $success = $stmt->execute([
             'user_id' => $userId,
             'name' => $name,
             'class_id' => $classId,
@@ -95,5 +95,10 @@ class CharacterRepository
             'int' => $class['base_int'],
             'vit' => $class['base_vit']
         ]);
+
+        if ($success) {
+            return (int)$this->db->lastInsertId();
+        }
+        return null;
     }
 }
